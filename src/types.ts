@@ -80,6 +80,14 @@ export interface Suggestion {
   category: "point" | "dose" | "safety"
 }
 
+export interface ReviewVersion {
+  version: number
+  teacherId: string
+  teacherName: string
+  modifiedAt: string
+  summary: string
+}
+
 export interface TeacherReview {
   teacherId: string
   teacherName: string
@@ -90,6 +98,8 @@ export interface TeacherReview {
   safetyFeedback?: string
   generalComment?: string
   reviewedAt: string
+  currentVersion: number
+  versions: ReviewVersion[]
 }
 
 export interface Submission {

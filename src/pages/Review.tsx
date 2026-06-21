@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { XCircle, Save, FileText, PenLine, CheckCircle } from "lucide-react"
+import { XCircle, Save, FileText, PenLine, CheckCircle, ChevronDown, ChevronUp, Clock, History } from "lucide-react"
 import FaceCanvas from "@/components/FaceCanvas"
 import { useStore } from "@/store/useStore"
 import type { Annotation, Suggestion } from "@/types"
@@ -36,6 +36,7 @@ export default function Review() {
   const [sTab, setStab] = useState<"point" | "dose" | "safety">("point")
   const [noteDraft, setNoteDraft] = useState(sub?.notes || "")
   const [noteSaved, setNoteSaved] = useState(false)
+  const [versionExpanded, setVersionExpanded] = useState(false)
 
   useEffect(() => {
     if (!isTeacher || !sub?.review) return
@@ -48,6 +49,10 @@ export default function Review() {
       general: sub.review.generalComment || "",
     })
   }, [sub?.review, isTeacher])
+
+  useEffect(() => {
+    setNoteDraft(sub?.notes || "")
+  }, [sub?.id])
 
   const hasExistingReview = isTeacher && !!sub?.review
 
@@ -154,7 +159,7 @@ export default function Review() {
           {sub.studentName} · {caseData.name} · {new Date(sub.submittedAt).toLocaleDateString()}
           {hasExistingReview && sub.review?.reviewedAt && (
             <span className="ml-2 px-2 py-0.5 bg-teal-700 rounded text-xs">
-              已有点评 · {new Date(sub.review.reviewedAt).toLocaleDateString()}
+              已有点评 · v{sub.review.currentVersion} · {new Date(sub.review.reviewedAt).toLocaleDateString()}
             </span>
           )}
         </div>
@@ -195,6 +200,35 @@ export default function Review() {
         <aside className="w-96 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
           {isTeacher ? (
             <div className="flex flex-col h-full">
+              {hasExistingReview && sub.review && sub.review.versions.length > 1 && (
+                <div className="px-4 py-2 border-b border-gray-100 bg-gray-50">
+                  <button
+                    onClick={() => setVersionExpanded(e => !e)}
+                    className="flex w-full items-center justify-between text-xs text-gray-600 hover:text-gray-800"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5" />
+                      修改历史（{sub.review.versions.length}个版本）
+                    </span>
+                    {versionExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                  {versionExpanded && (
+                    <div className="mt-2 space-y-1.5">
+                      {[...sub.review.versions].reverse().map((v) => (
+                        <div key={v.version} className="flex items-center justify-between rounded bg-white px-2 py-1.5 text-[11px]">
+                          <span className="font-medium text-[#0F766E]">v{v.version}</span>
+                          <span className="text-gray-500">{v.teacherName}</span>
+                          <span className="text-gray-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(v.modifiedAt).toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {anns.length > 0 && (
                 <div className="px-4 py-3 border-b border-gray-100 max-h-56 overflow-y-auto">
                   <h3 className="text-sm font-bold text-[#0F766E] mb-2">批注建议 ({anns.length})</h3>
@@ -254,7 +288,7 @@ export default function Review() {
               <div className="px-4 py-3 border-t border-gray-100">
                 <button onClick={submitReview}
                   className="w-full py-2.5 bg-[#0F766E] hover:bg-[#0D6560] text-white rounded-lg text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-1.5">
-                  <Save className="w-4 h-4" />保存点评
+                  <Save className="w-4 h-4" />{hasExistingReview ? "保存并生成新版本" : "保存点评"}
                 </button>
               </div>
             </div>
@@ -263,11 +297,49 @@ export default function Review() {
               {sub.review ? (
                 <>
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                    <h3 className="text-sm font-bold text-[#0F766E]">老师点评</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-[#0F766E]">老师点评</h3>
+                      <span className="text-[10px] font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded">v{sub.review.currentVersion}</span>
+                    </div>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
                       <CheckCircle className="w-3 h-3" />已点评
                     </span>
                   </div>
+
+                  {sub.review.versions.length > 1 && (
+                    <div className="px-4 py-2 border-b border-gray-100 bg-gray-50">
+                      <button
+                        onClick={() => setVersionExpanded(e => !e)}
+                        className="flex w-full items-center justify-between text-xs text-gray-600 hover:text-gray-800"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <History className="w-3.5 h-3.5" />
+                          历史版本（共{sub.review.versions.length}次修改）
+                        </span>
+                        {versionExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </button>
+                      {versionExpanded && (
+                        <div className="mt-2 space-y-1.5">
+                          {[...sub.review.versions].reverse().map((v, idx) => (
+                            <div key={v.version} className={`rounded px-2 py-1.5 text-[11px] ${idx === 0 ? "bg-teal-50 border border-teal-200" : "bg-white"}`}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-[#0F766E]">v{v.version} {idx === 0 && "(当前)"}</span>
+                                <span className="text-gray-500">{v.teacherName}</span>
+                              </div>
+                              <div className="flex items-center justify-between mt-0.5">
+                                <span className="text-gray-600">{v.summary}</span>
+                                <span className="text-gray-400 flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {new Date(v.modifiedAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex border-b border-gray-200">
                     {CATS.map(c => (
                       <button key={c.v} onClick={() => setStab(c.v)}

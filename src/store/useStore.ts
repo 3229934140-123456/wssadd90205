@@ -1,21 +1,23 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { User, Submission, StudentPoint, AdjustedReason, Annotation, Suggestion, TeacherReview, SubmissionScore, PointDiff, PointDiffStatus } from "../types"
+import type { User, Submission, StudentPoint, AdjustedReason, Annotation, Suggestion, TeacherReview, SubmissionScore, PointDiff, PointDiffStatus, ReviewVersion } from "../types"
 import { MOCK_USERS, MOCK_CASES } from "../data/mockData"
 
 interface AppState {
   currentUser: User | null
   submissions: Submission[]
   reviewListFilter: { search: string; caseId: string; status: 'all' | 'pending' | 'reviewed'; hasSafetyIssue: boolean }
+  profileSelectedCaseId: string | null
   login: (userId: string, password?: string) => boolean
   logout: () => void
   addSubmission: (submission: Submission) => void
   updateSubmission: (id: string, data: Partial<Submission>) => void
-  addReview: (submissionId: string, review: TeacherReview) => void
+  addReview: (submissionId: string, review: Omit<TeacherReview, 'currentVersion' | 'versions'>) => void
   toggleBookmark: (submissionId: string) => void
   updateNotes: (submissionId: string, notes: string) => void
   updateAdjustedReasons: (submissionId: string, reasons: AdjustedReason[]) => void
   setReviewListFilter: (filter: Partial<{ search: string; caseId: string; status: 'all' | 'pending' | 'reviewed'; hasSafetyIssue: boolean }>) => void
+  setProfileSelectedCaseId: (caseId: string | null) => void
   getUsers: () => User[]
   getCases: () => typeof MOCK_CASES
   getCaseById: (id: string) => typeof MOCK_CASES[0] | undefined
@@ -47,6 +49,7 @@ export const useStore = create<AppState>()(
       currentUser: null,
       submissions: [],
       reviewListFilter: { search: '', caseId: 'all', status: 'all', hasSafetyIssue: false },
+      profileSelectedCaseId: null,
 
       login: (userId: string, password?: string) => {
         const user = MOCK_USERS.find(u => u.id === userId)
@@ -71,12 +74,48 @@ export const useStore = create<AppState>()(
         }))
       },
 
-      addReview: (submissionId, review) => {
-        set(state => ({
-          submissions: state.submissions.map(s =>
-            s.id === submissionId ? { ...s, review, status: "reviewed" as const } : s
-          ),
-        }))
+      addReview: (submissionId, reviewData) => {
+        set(state => {
+          const sub = state.submissions.find(s => s.id === submissionId)
+          const existingReview = sub?.review
+          const nextVersion = existingReview ? existingReview.currentVersion + 1 : 1
+
+          const buildSummary = (r: typeof reviewData) => {
+            const parts: string[] = []
+            if (r.pointFeedback) parts.push(`点位${r.pointFeedback.length}字`)
+            if (r.doseFeedback) parts.push(`剂量${r.doseFeedback.length}字`)
+            if (r.safetyFeedback) parts.push(`安全${r.safetyFeedback.length}字`)
+            if (r.generalComment) parts.push(`综合${r.generalComment.length}字`)
+            if (r.suggestions.length > 0) parts.push(`${r.suggestions.length}条批注`)
+            return parts.join('，') || '微调内容'
+          }
+
+          const newVersionRecord: ReviewVersion = {
+            version: nextVersion,
+            teacherId: reviewData.teacherId,
+            teacherName: reviewData.teacherName,
+            modifiedAt: reviewData.reviewedAt,
+            summary: buildSummary(reviewData),
+          }
+
+          const review: TeacherReview = {
+            ...reviewData,
+            currentVersion: nextVersion,
+            versions: existingReview
+              ? [...existingReview.versions, newVersionRecord]
+              : [newVersionRecord],
+          }
+
+          return {
+            submissions: state.submissions.map(s =>
+              s.id === submissionId ? { ...s, review, status: "reviewed" as const } : s
+            ),
+          }
+        })
+      },
+
+      setProfileSelectedCaseId: (caseId) => {
+        set({ profileSelectedCaseId: caseId })
       },
 
       toggleBookmark: (submissionId) => {
@@ -201,6 +240,7 @@ export const useStore = create<AppState>()(
         currentUser: state.currentUser,
         submissions: state.submissions,
         reviewListFilter: state.reviewListFilter,
+        profileSelectedCaseId: state.profileSelectedCaseId,
       }),
     }
   )

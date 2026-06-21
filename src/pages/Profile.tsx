@@ -1,8 +1,9 @@
 import { useState, useRef, useMemo, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { BarChart3, Trophy, Star, Bookmark, ChevronDown, ChevronUp, FileDown, PenLine, Eye, MessageSquare, FileText, CheckSquare, NotebookPen, Award } from "lucide-react"
+import { BarChart3, Trophy, Star, Bookmark, ChevronDown, ChevronUp, FileDown, PenLine, Eye, MessageSquare, FileText, CheckSquare, NotebookPen, Award, TrendingUp } from "lucide-react"
 import { useStore } from "@/store/useStore"
 import RadarChart from "@/components/RadarChart"
+import FaceCanvas from "@/components/FaceCanvas"
 
 export default function Profile() {
   const navigate = useNavigate()
@@ -11,13 +12,16 @@ export default function Profile() {
   const toggleBookmark = useStore((s) => s.toggleBookmark)
   const updateNotes = useStore((s) => s.updateNotes)
   const getCaseById = useStore((s) => s.getCaseById)
+  const profileSelectedCaseId = useStore((s) => s.profileSelectedCaseId)
+  const setProfileSelectedCaseId = useStore((s) => s.setProfileSelectedCaseId)
+  const compareSubmission = useStore((s) => s.compareSubmission)
 
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set())
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
   const [filter, setFilter] = useState<"all" | "bookmarked" | "hasNotes" | "pending" | "reviewed">("all")
-  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null)
   const [reportExpanded, setReportExpanded] = useState(false)
   const reportRef = useRef<HTMLDivElement>(null)
+  const exportingRef = useRef(false)
 
   if (!currentUser) return <div className="flex h-full items-center justify-center text-gray-400">请先登录</div>
 
@@ -77,11 +81,7 @@ export default function Profile() {
     }))
   }, [submissions, getCaseById])
 
-  useEffect(() => {
-    if (casesWithSubmissions.length > 0 && !selectedCaseId) {
-      setSelectedCaseId(casesWithSubmissions[0].caseId)
-    }
-  }, [casesWithSubmissions, selectedCaseId])
+  const selectedCaseId = profileSelectedCaseId ?? (casesWithSubmissions[0]?.caseId ?? null)
 
   const iconMap: Record<string, any> = {
     submission: FileText,
@@ -116,7 +116,7 @@ export default function Profile() {
         date: new Date(sub.submittedAt),
         title: "提交练习",
         subtitle: `得分: ${sub.score?.total ?? 0}`,
-        action: () => navigate(`/compare/${sub.id}`),
+        action: () => { setProfileSelectedCaseId(selectedCaseId); navigate(`/compare/${sub.id}`) },
         label: "查看",
       })
       if (sub.status === "adjusted" || sub.adjustedReasons.length > 0) {
@@ -125,7 +125,7 @@ export default function Profile() {
           type: "adjusted",
           date: new Date(sub.submittedAt),
           title: "答案对比",
-          action: () => navigate(`/compare/${sub.id}`),
+          action: () => { setProfileSelectedCaseId(selectedCaseId); navigate(`/compare/${sub.id}`) },
           label: "查看对比",
         })
       }
@@ -134,9 +134,9 @@ export default function Profile() {
           id: `${sub.id}-rev`,
           type: "review",
           date: new Date(sub.review.reviewedAt),
-          title: "老师点评",
-          subtitle: sub.review.teacherName,
-          action: () => navigate(`/review/${sub.id}`),
+          title: "老师反馈",
+          subtitle: sub.review.teacherName + (sub.review.currentVersion > 1 ? ` · v${sub.review.currentVersion}` : ""),
+          action: () => { setProfileSelectedCaseId(selectedCaseId); navigate(`/review/${sub.id}`) },
           label: "查看点评",
         })
       }
@@ -146,29 +146,45 @@ export default function Profile() {
           id: `${sub.id}-note`,
           type: "notes",
           date: nd,
-          title: "复盘笔记",
+          title: "笔记复盘",
           action: () => scrollToNote(sub.id),
           label: "编辑",
         })
       }
     })
     return events.sort((a, b) => +a.date - +b.date || typeOrder[a.type] - typeOrder[b.type])
-  }, [selectedCaseId, submissions, navigate])
+  }, [selectedCaseId, submissions, navigate, setProfileSelectedCaseId])
 
   const handleExport = async () => {
     try {
+      exportingRef.current = true
+      setReportExpanded(true)
       const html2canvas = (await import("html2canvas")).default
       const { jsPDF } = await import("jspdf")
-      if (!reportRef.current) return
-      const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: "#ffffff" })
+      await new Promise(r => setTimeout(r, 300))
+      if (!reportRef.current) { exportingRef.current = false; return }
+      const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false })
       const imgData = canvas.toDataURL("image/png")
       const pdf = new jsPDF("p", "mm", "a4")
       const pdfW = pdf.internal.pageSize.getWidth()
       const pdfH = (canvas.height * pdfW) / canvas.width
-      pdf.addImage(imgData, "PNG", 0, 0, pdfW, pdfH)
+      const pageH = pdf.internal.pageSize.getHeight()
+      let heightLeft = pdfH
+      let position = 0
+      pdf.addImage(imgData, "PNG", 0, position, pdfW, pdfH)
+      heightLeft -= pageH
+      while (heightLeft > 0) {
+        position = heightLeft - pdfH
+        pdf.addPage()
+        pdf.addImage(imgData, "PNG", 0, position, pdfW, pdfH)
+        heightLeft -= pageH
+      }
       pdf.save("结业报告.pdf")
-    } catch {
+    } catch (e) {
+      console.error(e)
       alert("导出失败，请确认已安装 html2canvas 和 jspdf 依赖")
+    } finally {
+      exportingRef.current = false
     }
   }
 
@@ -178,6 +194,18 @@ export default function Profile() {
     { icon: Trophy, label: "最高分", value: maxScore, color: "text-[#F97066]" },
     { icon: Star, label: "已收藏数", value: bookmarkCount, color: "text-yellow-500" },
   ]
+
+  const CATS = [
+    { v: "point", l: "点位问题", c: "#0F766E" },
+    { v: "dose", l: "剂量问题", c: "#F97066" },
+    { v: "safety", l: "安全风险", c: "#DC2626" },
+  ]
+
+  const annColorMap = (sugs: any[]) => {
+    const m = new Map<string, string>()
+    sugs.forEach(s => { const c = CATS.find(c => c.v === s.category); if (c) m.set(s.annotationId, c.c) })
+    return m
+  }
 
   return (
     <div className="min-h-screen bg-[#F0F4F8] px-6 py-8">
@@ -321,55 +349,61 @@ export default function Profile() {
           {submissions.length > 0 && (
             <div className="rounded-xl bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold text-[#1E293B]">病例复盘时间线</h2>
-              <div className="mb-4 flex flex-wrap gap-2">
-                {casesWithSubmissions.map((c) => (
-                  <button
-                    key={c.caseId}
-                    onClick={() => setSelectedCaseId(c.caseId)}
-                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                      selectedCaseId === c.caseId
-                        ? "bg-[#0F766E] text-white"
-                        : "bg-white text-gray-500 hover:bg-gray-50"
-                    }`}
-                  >
-                    {c.caseName}
-                  </button>
-                ))}
-              </div>
+              {casesWithSubmissions.length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {casesWithSubmissions.map((c) => (
+                    <button
+                      key={c.caseId}
+                      onClick={() => setProfileSelectedCaseId(c.caseId)}
+                      className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        selectedCaseId === c.caseId
+                          ? "bg-[#0F766E] text-white"
+                          : "bg-white text-gray-500 hover:bg-gray-50"
+                      }`}
+                    >
+                      {c.caseName}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="relative pl-8">
-                {timelineEvents.map((e, i) => {
-                  const Icon = iconMap[e.type]
-                  const last = i === timelineEvents.length - 1
-                  return (
-                    <div key={e.id} className="relative pb-6">
-                      {!last && (
-                        <div className="absolute left-[-24px] top-6 w-0.5 h-full bg-gray-200" />
-                      )}
-                      <div className="absolute left-[-28px] top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#0F766E] text-white">
-                        <Icon size={14} />
-                      </div>
-                      <div className="rounded-lg border border-gray-100 p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-medium text-[#1E293B]">{e.title}</div>
-                            {e.subtitle && <div className="text-xs text-gray-400">{e.subtitle}</div>}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {e.date.toLocaleDateString("zh-CN")}
-                          </div>
-                        </div>
-                        {e.action && (
-                          <button
-                            onClick={e.action}
-                            className="mt-2 rounded-md border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-[#0F766E] hover:text-[#0F766E]"
-                          >
-                            {e.label}
-                          </button>
+                {timelineEvents.length === 0 ? (
+                  <p className="text-sm text-gray-400">请选择病例查看时间线</p>
+                ) : (
+                  timelineEvents.map((e, i) => {
+                    const Icon = iconMap[e.type]
+                    const last = i === timelineEvents.length - 1
+                    return (
+                      <div key={e.id} className="relative pb-6">
+                        {!last && (
+                          <div className="absolute left-[-24px] top-6 w-0.5 h-full bg-gray-200" />
                         )}
+                        <div className="absolute left-[-28px] top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#0F766E] text-white">
+                          <Icon size={14} />
+                        </div>
+                        <div className="rounded-lg border border-gray-100 p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium text-[#1E293B]">{e.title}</div>
+                              {e.subtitle && <div className="text-xs text-gray-400">{e.subtitle}</div>}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {e.date.toLocaleDateString("zh-CN")}
+                            </div>
+                          </div>
+                          {e.action && (
+                            <button
+                              onClick={e.action}
+                              className="mt-2 rounded-md border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-[#0F766E] hover:text-[#0F766E]"
+                            >
+                              {e.label}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                )}
               </div>
             </div>
           )}
@@ -456,8 +490,7 @@ export default function Profile() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    if (!reportExpanded) setReportExpanded(true)
-                    setTimeout(() => handleExport(), 100)
+                    handleExport()
                   }}
                   className="rounded-md bg-[#0F766E] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#0D6B63]"
                 >
@@ -470,8 +503,8 @@ export default function Profile() {
                 )}
               </div>
             </button>
-            {reportExpanded && (
-              <div ref={reportRef} className="mt-6 border-t border-gray-100 pt-6 space-y-6">
+            {(reportExpanded || exportingRef.current) && (
+              <div ref={reportRef} className="mt-6 border-t border-gray-100 pt-6 space-y-8 bg-white">
                 <div className="text-center border-b border-gray-200 pb-4">
                   <h3 className="text-xl font-bold text-[#0F766E]">注射点位练习结业报告</h3>
                   <p className="text-sm text-gray-500 mt-1">
@@ -514,180 +547,137 @@ export default function Profile() {
                   </div>
                 </div>
 
-                {bookmarked.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-bold text-[#1E293B] mb-3 flex items-center gap-2">
-                      <Star className="w-4 h-4 text-yellow-500" />收藏病例
-                    </h4>
-                    <table className="w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-gray-50">
-                          <th className="px-3 py-2 text-left font-medium text-gray-600 border border-gray-200">
-                            病例名称
-                          </th>
-                          <th className="px-3 py-2 text-center font-medium text-gray-600 border border-gray-200">
-                            得分
-                          </th>
-                          <th className="px-3 py-2 text-center font-medium text-gray-600 border border-gray-200">
-                            状态
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bookmarked.map((sub) => {
-                          const c = getCaseById(sub.caseId)
-                          return (
-                            <tr key={sub.id}>
-                              <td className="px-3 py-2 border border-gray-200 text-[#1E293B]">
-                                {c?.name ?? "—"}
-                              </td>
-                              <td className="px-3 py-2 border border-gray-200 text-center font-medium text-[#0F766E]">
-                                {sub.score?.total ?? 0}
-                              </td>
-                              <td className="px-3 py-2 border border-gray-200 text-center text-gray-500">
-                                {sub.review ? "已点评" : "待点评"}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                <div>
-                  <h4 className="text-sm font-bold text-[#1E293B] mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-[#0F766E]" />练习记录
-                  </h4>
-                  <table className="w-full text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50">
-                        <th className="px-2 py-2 text-left font-medium text-gray-600 border border-gray-200">
-                          #
-                        </th>
-                        <th className="px-2 py-2 text-left font-medium text-gray-600 border border-gray-200">
-                          病例
-                        </th>
-                        <th className="px-2 py-2 text-left font-medium text-gray-600 border border-gray-200">
-                          日期
-                        </th>
-                        <th className="px-2 py-2 text-center font-medium text-gray-600 border border-gray-200">
-                          得分
-                        </th>
-                        <th className="px-2 py-2 text-center font-medium text-gray-600 border border-gray-200">
-                          状态
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sorted.map((sub, i) => {
-                        const c = getCaseById(sub.caseId)
-                        return (
-                          <tr key={sub.id}>
-                            <td className="px-2 py-2 border border-gray-200 text-gray-500">{i + 1}</td>
-                            <td className="px-2 py-2 border border-gray-200 text-[#1E293B]">
-                              {c?.name ?? "—"}
-                            </td>
-                            <td className="px-2 py-2 border border-gray-200 text-gray-500">
-                              {new Date(sub.submittedAt).toLocaleDateString("zh-CN")}
-                            </td>
-                            <td className="px-2 py-2 border border-gray-200 text-center font-medium text-[#0F766E]">
-                              {sub.score?.total ?? 0}
-                            </td>
-                            <td className="px-2 py-2 border border-gray-200 text-center text-gray-500">
-                              {sub.review ? "已点评" : "待点评"}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {submissions.filter((s) => s.review).length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-bold text-[#1E293B] mb-3 flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-[#0F766E]" />点评反馈汇总
-                    </h4>
-                    <div className="space-y-3">
-                      {submissions
-                        .filter((s) => s.review)
-                        .map((sub) => {
-                          const c = getCaseById(sub.caseId)
-                          const r = sub.review!
-                          return (
-                            <div key={sub.id} className="border border-gray-200 rounded-lg p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-[#1E293B]">
-                                  {c?.name ?? "—"}
-                                </span>
-                                <span className="text-[10px] text-gray-400">
-                                  点评人：{r.teacherName}
-                                </span>
-                              </div>
-                            {r.pointFeedback && (
-                              <div className="mb-2">
-                                <span className="text-[10px] font-bold text-[#0F766E]">
-                                  点位问题：
-                                </span>
-                                <p className="text-xs text-gray-600">{r.pointFeedback}</p>
-                              </div>
-                            )}
-                            {r.doseFeedback && (
-                              <div className="mb-2">
-                                <span className="text-[10px] font-bold text-[#F97066]">
-                                  剂量问题：
-                                </span>
-                                <p className="text-xs text-gray-600">{r.doseFeedback}</p>
-                              </div>
-                            )}
-                            {r.safetyFeedback && (
-                              <div className="mb-2">
-                                <span className="text-[10px] font-bold text-red-600">
-                                  安全风险：
-                                </span>
-                                <p className="text-xs text-gray-600">{r.safetyFeedback}</p>
-                              </div>
-                            )}
-                            {r.generalComment && (
-                              <div>
-                                <span className="text-[10px] font-bold text-gray-600">
-                                  综合评语：
-                                </span>
-                                <p className="text-xs text-gray-600">{r.generalComment}</p>
-                              </div>
-                            )}
+                {casesWithSubmissions.map((caseGroup) => {
+                  const c = getCaseById(caseGroup.caseId)
+                  const lastSub = caseGroup.subs[caseGroup.subs.length - 1]
+                  const scores = caseGroup.subs.map(s => s.score?.total ?? 0)
+                  const scoreTrend = scores.length >= 2 ? (scores[scores.length - 1] - scores[0]) : 0
+                  return (
+                    <div key={caseGroup.caseId} className="border border-gray-200 rounded-lg p-4 space-y-4">
+                      <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                        <div>
+                          <h4 className="text-base font-bold text-[#0F766E]">{c?.name ?? caseGroup.caseName}</h4>
+                          <p className="text-xs text-gray-500 mt-0.5">共{caseGroup.subs.length}次练习</p>
+                        </div>
+                        {scoreTrend !== 0 && (
+                          <div className={`flex items-center gap-1 text-xs font-semibold ${scoreTrend > 0 ? "text-green-600" : "text-red-500"}`}>
+                            <TrendingUp className={`w-3.5 h-3.5 ${scoreTrend < 0 ? "rotate-180" : ""}`} />
+                            {scoreTrend > 0 ? `+${scoreTrend}分` : `${scoreTrend}分`}
                           </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+                        )}
+                      </div>
 
-                {sorted.filter((s) => s.notes.trim()).length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-bold text-[#1E293B] mb-3 flex items-center gap-2">
-                      <NotebookPen className="w-4 h-4 text-[#0F766E]" />学习笔记
-                    </h4>
-                    <div className="space-y-3">
-                      {sorted
-                        .filter((s) => s.notes.trim())
-                        .map((sub) => {
-                          const c = getCaseById(sub.caseId)
-                          return (
-                            <div key={sub.id} className="bg-gray-50 rounded-lg p-3">
-                              <div className="text-xs font-medium text-[#0F766E] mb-1">
-                                {c?.name ?? "—"}
+                      <div>
+                        <h5 className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
+                          <FileText className="w-3.5 h-3.5 text-[#0F766E]" />练习记录与分数变化
+                        </h5>
+                        <table className="w-full text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-gray-50">
+                              <th className="px-2 py-1.5 text-left font-medium text-gray-600 border border-gray-200">日期</th>
+                              <th className="px-2 py-1.5 text-center font-medium text-gray-600 border border-gray-200">总分</th>
+                              <th className="px-2 py-1.5 text-center font-medium text-gray-600 border border-gray-200">点位</th>
+                              <th className="px-2 py-1.5 text-center font-medium text-gray-600 border border-gray-200">剂量</th>
+                              <th className="px-2 py-1.5 text-center font-medium text-gray-600 border border-gray-200">层次</th>
+                              <th className="px-2 py-1.5 text-center font-medium text-gray-600 border border-gray-200">安全</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {caseGroup.subs.map((sub) => (
+                              <tr key={sub.id}>
+                                <td className="px-2 py-1.5 border border-gray-200 text-gray-600">{new Date(sub.submittedAt).toLocaleDateString("zh-CN")}</td>
+                                <td className="px-2 py-1.5 border border-gray-200 text-center font-medium text-[#0F766E]">{sub.score?.total ?? 0}</td>
+                                <td className="px-2 py-1.5 border border-gray-200 text-center text-gray-600">{sub.score?.pointAccuracy ?? 0}</td>
+                                <td className="px-2 py-1.5 border border-gray-200 text-center text-gray-600">{sub.score?.doseReasonable ?? 0}</td>
+                                <td className="px-2 py-1.5 border border-gray-200 text-center text-gray-600">{sub.score?.layerCorrect ?? 0}</td>
+                                <td className="px-2 py-1.5 border border-gray-200 text-center text-gray-600">{sub.score?.safetyAwareness ?? 0}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {lastSub?.review && (
+                        <>
+                          <div className="flex gap-4 items-start">
+                            <div className="w-[200px] shrink-0">
+                              <h5 className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
+                                <Eye className="w-3.5 h-3.5 text-[#0F766E]" />老师圈注
+                              </h5>
+                              <div className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ width: 200, height: 220 }}>
+                                <FaceCanvas
+                                  points={lastSub.points.map(p => ({ id: p.id, x: p.x, y: p.y }))}
+                                  standardPoints={(c?.standardPoints ?? []).map(p => ({ id: p.id, x: p.x, y: p.y }))}
+                                  annotations={lastSub.review.annotations}
+                                  annotationColors={annColorMap(lastSub.review.suggestions)}
+                                  readOnly
+                                  showLabels={false}
+                                />
                               </div>
-                              <p className="text-xs text-gray-600 whitespace-pre-wrap">
-                                {sub.notes}
-                              </p>
                             </div>
-                          )
-                        })}
+                            <div className="flex-1">
+                              <h5 className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
+                                <MessageSquare className="w-3.5 h-3.5 text-[#0F766E]" />
+                                老师结构化点评
+                                <span className="text-[10px] font-normal text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">v{lastSub.review.currentVersion} · {lastSub.review.teacherName}</span>
+                              </h5>
+                              <div className="space-y-2">
+                                {lastSub.review.suggestions.length > 0 && (
+                                  <div className="grid grid-cols-3 gap-2">
+                                    {CATS.map(cat => {
+                                      const items = lastSub.review!.suggestions.filter(s => s.category === cat.v)
+                                      if (items.length === 0) return null
+                                      return (
+                                        <div key={cat.v} className="rounded border p-2" style={{ borderColor: cat.c }}>
+                                          <div className="text-[10px] font-bold mb-1" style={{ color: cat.c }}>{cat.l} ({items.length})</div>
+                                          <ul className="space-y-0.5">
+                                            {items.map((s, i) => (
+                                              <li key={s.annotationId} className="text-[11px] text-gray-700 leading-tight">{i + 1}. {s.text}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                                {lastSub.review.pointFeedback && (
+                                  <div><span className="text-[10px] font-bold text-[#0F766E]">点位总结：</span><span className="text-[11px] text-gray-600">{lastSub.review.pointFeedback}</span></div>
+                                )}
+                                {lastSub.review.doseFeedback && (
+                                  <div><span className="text-[10px] font-bold text-[#F97066]">剂量总结：</span><span className="text-[11px] text-gray-600">{lastSub.review.doseFeedback}</span></div>
+                                )}
+                                {lastSub.review.safetyFeedback && (
+                                  <div><span className="text-[10px] font-bold text-red-600">安全风险：</span><span className="text-[11px] text-gray-600">{lastSub.review.safetyFeedback}</span></div>
+                                )}
+                                {lastSub.review.generalComment && (
+                                  <div><span className="text-[10px] font-bold text-gray-600">综合评语：</span><span className="text-[11px] text-gray-600">{lastSub.review.generalComment}</span></div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {caseGroup.subs.some(s => s.notes.trim()) && (
+                        <div>
+                          <h5 className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
+                            <NotebookPen className="w-3.5 h-3.5 text-[#0F766E]" />复盘笔记
+                          </h5>
+                          <div className="space-y-1.5">
+                            {caseGroup.subs.filter(s => s.notes.trim()).map((sub) => (
+                              <div key={sub.id} className="bg-gray-50 rounded p-2.5">
+                                <div className="text-[10px] font-medium text-[#0F766E] mb-0.5">
+                                  {new Date(sub.submittedAt).toLocaleDateString("zh-CN")}
+                                </div>
+                                <p className="text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed">{sub.notes}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  )
+                })}
               </div>
             )}
           </div>
