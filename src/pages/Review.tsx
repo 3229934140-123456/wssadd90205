@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { Clock, CheckCircle, PenLine } from "lucide-react"
+import { Clock, CheckCircle, PenLine, Save } from "lucide-react"
 import FaceCanvas from "@/components/FaceCanvas"
 import { useStore } from "@/store/useStore"
 import type { Annotation, Suggestion, TeacherReview, PointDiffStatus } from "@/types"
@@ -8,7 +8,7 @@ import type { Annotation, Suggestion, TeacherReview, PointDiffStatus } from "@/t
 export default function Review() {
   const { submissionId } = useParams<{ submissionId: string }>()
   const navigate = useNavigate()
-  const { getSubmissionById, getCaseById, addReview, currentUser, compareSubmission } = useStore()
+  const { getSubmissionById, getCaseById, addReview, currentUser, compareSubmission, updateNotes } = useStore()
 
   const submission = getSubmissionById(submissionId!)
   const caseData = submission ? getCaseById(submission.caseId) : undefined
@@ -18,6 +18,8 @@ export default function Review() {
   const [annotations, setAnnotations] = useState<Annotation[]>([])
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [annotationMode, setAnnotationMode] = useState(false)
+  const [noteDraft, setNoteDraft] = useState("")
+  const [noteSaved, setNoteSaved] = useState(false)
 
   const diffStatuses = new Map<string, PointDiffStatus>()
   diffs.forEach(d => diffStatuses.set(d.studentPoint.id, d.status))
@@ -185,13 +187,35 @@ export default function Review() {
                   </div>
                 ))}
               </div>
-              <div className="mt-4">
-                <button
-                  onClick={() => navigate("/profile")}
-                  className="w-full py-2.5 bg-[#0F766E] hover:bg-[#0D6560] text-white rounded-lg text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <PenLine className="w-4 h-4" />写复盘笔记
-                </button>
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <h4 className="text-sm font-bold text-[#0F766E] mb-2 flex items-center gap-1.5">
+                  <PenLine className="w-3.5 h-3.5" />复盘笔记
+                </h4>
+                <textarea
+                  value={noteDraft}
+                  onChange={e => { setNoteDraft(e.target.value); setNoteSaved(false) }}
+                  className="w-full rounded-lg border border-gray-200 p-3 text-sm text-[#1E293B] focus:border-[#0F766E] focus:outline-none resize-none"
+                  rows={3}
+                  placeholder={submission.notes ? "" : "写下你的复盘思考..."}
+                />
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    onClick={() => {
+                      const text = noteDraft.trim() || submission.notes
+                      updateNotes(submission.id, text)
+                      setNoteSaved(true)
+                    }}
+                    className="flex items-center gap-1.5 rounded-md bg-[#0F766E] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#0D6B63]"
+                  >
+                    <Save className="w-3.5 h-3.5" />{noteSaved ? "已保存" : "保存笔记"}
+                  </button>
+                  <button
+                    onClick={() => navigate("/profile")}
+                    className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50"
+                  >
+                    前往成绩档案
+                  </button>
+                </div>
               </div>
             </div>
           )}

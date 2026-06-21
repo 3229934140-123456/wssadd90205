@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Star, AlertTriangle, Info, X } from "lucide-react"
+import { Star, AlertTriangle, Info, X, Bookmark } from "lucide-react"
 import { useStore } from "@/store/useStore"
 import FaceCanvas from "@/components/FaceCanvas"
 
@@ -15,6 +15,22 @@ export default function Cases() {
   const studentSubmissions = currentUser ? getSubmissionsByStudent(currentUser.id) : []
 
   const isCompleted = (caseId: string) => studentSubmissions.some((s) => s.caseId === caseId)
+
+  const isBookmarked = (caseId: string) => studentSubmissions.some((s) => s.caseId === caseId && s.bookmarked)
+
+  const latestSubmission = (caseId: string) => {
+    const subs = studentSubmissions.filter(s => s.caseId === caseId)
+    if (subs.length === 0) return null
+    return subs.reduce((a, b) => new Date(a.submittedAt).getTime() > new Date(b.submittedAt).getTime() ? a : b)
+  }
+
+  const handleToggleBookmark = (e: React.MouseEvent, caseId: string) => {
+    e.stopPropagation()
+    const sub = latestSubmission(caseId)
+    if (sub) {
+      useStore.getState().toggleBookmark(sub.id)
+    }
+  }
 
   const categoryColor: Record<string, string> = {
     "瘦脸": "bg-teal-100 text-teal-800",
@@ -77,15 +93,29 @@ export default function Cases() {
 
               <p className="mb-3 line-clamp-2 text-sm text-gray-500">{c.description}</p>
 
-              <div>
-                {isCompleted(c.id) ? (
-                  <span className="inline-block rounded-full bg-green-100 px-3 py-0.5 text-xs font-medium text-green-700">
-                    已完成
-                  </span>
-                ) : (
-                  <span className="inline-block rounded-full bg-gray-100 px-3 py-0.5 text-xs font-medium text-gray-500">
-                    未练习
-                  </span>
+              <div className="flex items-center justify-between">
+                <div>
+                  {isCompleted(c.id) ? (
+                    <span className="inline-block rounded-full bg-green-100 px-3 py-0.5 text-xs font-medium text-green-700">
+                      已完成
+                    </span>
+                  ) : (
+                    <span className="inline-block rounded-full bg-gray-100 px-3 py-0.5 text-xs font-medium text-gray-500">
+                      未练习
+                    </span>
+                  )}
+                </div>
+                {isCompleted(c.id) && (
+                  <button
+                    onClick={(e) => handleToggleBookmark(e, c.id)}
+                    className="p-1.5 rounded-lg transition-colors hover:bg-gray-100"
+                    title={isBookmarked(c.id) ? "取消收藏" : "收藏"}
+                  >
+                    <Bookmark
+                      size={16}
+                      className={isBookmarked(c.id) ? "fill-yellow-400 text-yellow-400" : "text-gray-300 hover:text-yellow-400"}
+                    />
+                  </button>
                 )}
               </div>
             </div>

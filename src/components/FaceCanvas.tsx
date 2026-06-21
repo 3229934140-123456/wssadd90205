@@ -42,6 +42,7 @@ interface FaceCanvasProps {
   diffStatuses?: Map<string, "correct" | "offset" | "error">
   annotations?: Annotation[]
   onDrawAnnotation?: (cx: number, cy: number, radius: number) => void
+  pointInDanger?: Set<string>
 }
 
 const DIFF_COLORS: Record<string, string> = {
@@ -117,6 +118,7 @@ export default function FaceCanvas({
   diffStatuses,
   annotations,
   onDrawAnnotation,
+  pointInDanger,
 }: FaceCanvasProps) {
   const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -151,13 +153,7 @@ export default function FaceCanvas({
         }
       } else {
         const coords = getSvgCoords(e)
-        const hitZone = dangerZones?.some(
-          (dz) =>
-            ((coords.x - dz.cx) / dz.rx) ** 2 + ((coords.y - dz.cy) / dz.ry) ** 2 <= 1
-        )
-        if (!hitZone) {
-          onAddPoint?.(coords.x, coords.y)
-        }
+        onAddPoint?.(coords.x, coords.y)
         onSelectPoint?.(null)
       }
     },
@@ -227,9 +223,22 @@ export default function FaceCanvas({
         const diffColor = diffStatuses?.get(pt.id)
         const fill = diffColor ? DIFF_COLORS[diffColor] : "#0F766E"
         const isSelected = pt.id === selectedPointId
+        const inDanger = pointInDanger?.has(pt.id)
 
         return (
           <g key={pt.id} data-point-id={pt.id}>
+            {inDanger && (
+              <circle
+                cx={pt.x}
+                cy={pt.y}
+                r={14}
+                fill="none"
+                stroke="#ef4444"
+                strokeWidth={2}
+                strokeDasharray="3 2"
+                opacity={0.8}
+              />
+            )}
             <circle
               cx={pt.x}
               cy={pt.y}

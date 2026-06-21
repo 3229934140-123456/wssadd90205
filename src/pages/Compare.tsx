@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useParams } from "react-router-dom"
-import { ArrowLeft, CheckCircle, AlertCircle, XCircle, Send } from "lucide-react"
+import { ArrowLeft, CheckCircle, AlertCircle, XCircle, Send, Bookmark, AlertTriangle } from "lucide-react"
 import FaceCanvas from "@/components/FaceCanvas"
 import { useStore } from "@/store/useStore"
 import { LAYER_LABELS, SIDE_LABELS } from "@/types"
@@ -26,7 +26,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function Compare() {
   const { submissionId } = useParams<{ submissionId: string }>()
-  const { getSubmissionById, getCaseById, compareSubmission, updateAdjustedReasons } = useStore()
+  const { getSubmissionById, getCaseById, compareSubmission, updateAdjustedReasons, toggleBookmark } = useStore()
 
   const submission = getSubmissionById(submissionId!)
   const caseData = submission ? getCaseById(submission.caseId) : undefined
@@ -80,17 +80,29 @@ export default function Compare() {
             <p className="text-teal-200 text-xs">{caseData.name} · {new Date(submission.submittedAt).toLocaleString()}</p>
           </div>
         </div>
-        {submission.score && (
-          <div className="bg-white/15 backdrop-blur rounded-lg px-4 py-2 text-sm">
-            <div className="font-bold text-base">{submission.score.total}分</div>
-            <div className="flex gap-3 text-teal-200 text-xs mt-0.5">
-              <span>定位{submission.score.pointAccuracy}</span>
-              <span>剂量{submission.score.doseReasonable}</span>
-              <span>层次{submission.score.layerCorrect}</span>
-              <span>安全{submission.score.safetyAwareness}</span>
+        <div className="flex items-center gap-2">
+          {submission.score && (
+            <div className="bg-white/15 backdrop-blur rounded-lg px-4 py-2 text-sm">
+              <div className="font-bold text-base">{submission.score.total}分</div>
+              <div className="flex gap-3 text-teal-200 text-xs mt-0.5">
+                <span>定位{submission.score.pointAccuracy}</span>
+                <span>剂量{submission.score.doseReasonable}</span>
+                <span>层次{submission.score.layerCorrect}</span>
+                <span>安全{submission.score.safetyAwareness}</span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+          <button
+            onClick={() => toggleBookmark(submission.id)}
+            className="p-2 rounded-lg transition-colors hover:bg-white/20"
+            title={submission.bookmarked ? "取消收藏" : "收藏此病例"}
+          >
+            <Bookmark
+              size={20}
+              className={submission.bookmarked ? "fill-yellow-400 text-yellow-400" : "text-white/70 hover:text-yellow-400"}
+            />
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -101,6 +113,7 @@ export default function Compare() {
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-500 inline-block" /> 偏移</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> 错误</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500/30 border border-green-500 inline-block" /> 标准点</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full border-2 border-dashed border-red-500 inline-block" /> 未避开风险区</span>
           </div>
           <div className="flex justify-center">
             <FaceCanvas
@@ -108,11 +121,30 @@ export default function Compare() {
               dangerZones={dangerZones}
               standardPoints={standardPoints}
               diffStatuses={diffStatuses}
+              pointInDanger={new Set(diffs.filter(d => d.inDangerZone).map(d => d.studentPoint.id))}
               readOnly
               showLabels
             />
           </div>
         </section>
+
+        {diffs.some(d => d.inDangerZone) && (
+          <section className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              <h2 className="text-sm font-bold text-red-700">风险区提醒</h2>
+            </div>
+            <p className="text-sm text-red-600 mb-2">以下点位未避开高风险区域，请重点关注：</p>
+            <ul className="space-y-1">
+              {diffs.map((d, i) => d.inDangerZone && (
+                <li key={d.studentPoint.id} className="flex items-center gap-2 text-sm text-red-700">
+                  <XCircle className="w-4 h-4 shrink-0" />
+                  <span>点位#{i + 1} 位于危险区域 — 建议调整位置</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="bg-white rounded-xl shadow-sm p-4 overflow-x-auto">
           <h2 className="text-sm font-bold text-[#0F766E] mb-3">剂量对比</h2>

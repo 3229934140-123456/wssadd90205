@@ -5,6 +5,7 @@ import Cases from "@/pages/Cases"
 import CanvasPage from "@/pages/CanvasPage"
 import Compare from "@/pages/Compare"
 import Review from "@/pages/Review"
+import ReviewList from "@/pages/ReviewList"
 import Profile from "@/pages/Profile"
 import Resources from "@/pages/Resources"
 import { useStore } from "@/store/useStore"
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/canvas/:caseId" element={<CanvasPage />} />
           <Route path="/compare/:submissionId" element={<Compare />} />
           <Route path="/review/:submissionId" element={<Review />} />
+          <Route path="/review" element={<ReviewList />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/resources" element={<Resources />} />
         </Route>

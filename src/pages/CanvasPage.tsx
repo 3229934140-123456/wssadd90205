@@ -89,6 +89,10 @@ export default function CanvasPage() {
   }, [selectedId])
 
   const handleSubmit = () => {
+    if (points.length === 0) {
+      showToast("请至少添加一个注射点位再提交")
+      return
+    }
     const incomplete = points.find(p => !p.leftDose || !p.rightDose || p.angle == null || !p.layer)
     if (incomplete) {
       showToast("请填写所有点位的剂量、层次和角度")
@@ -138,6 +142,7 @@ export default function CanvasPage() {
             onAddPoint={handleAddPoint}
             onMovePoint={handleMovePoint}
             onSelectPoint={setSelectedId}
+            pointInDanger={new Set(points.filter(p => isPointInDangerZone(p.x, p.y, caseData.dangerZones)).map(p => p.id))}
           />
         </div>
 
@@ -153,10 +158,15 @@ export default function CanvasPage() {
               <div
                 key={pt.id}
                 onClick={() => setSelectedId(pt.id)}
-                className={`px-4 py-3 border-b border-gray-50 cursor-pointer transition-colors ${selectedId === pt.id ? "bg-teal-50 border-l-2 border-l-[#0F766E]" : "hover:bg-gray-50"}`}
+                className={`px-4 py-3 border-b border-gray-50 cursor-pointer transition-colors ${selectedId === pt.id ? "bg-teal-50 border-l-2 border-l-[#0F766E]" : isPointInDangerZone(pt.x, pt.y, caseData.dangerZones) ? "bg-red-50/50 border-l-2 border-l-red-400" : "hover:bg-gray-50"}`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-bold text-[#0F766E]">点位 {idx + 1}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-[#0F766E]">点位 {idx + 1}</span>
+                    {isPointInDangerZone(pt.x, pt.y, caseData.dangerZones) && (
+                      <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded">风险区</span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400">({Math.round(pt.x)}, {Math.round(pt.y)})</span>
                     <button onClick={e => { e.stopPropagation(); deletePoint(pt.id) }} className="p-1 text-gray-400 hover:text-[#F97066] transition-colors">

@@ -1,6 +1,6 @@
 import { useState, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { BarChart3, Trophy, Star, Bookmark, ChevronDown, ChevronUp, FileDown } from "lucide-react"
+import { BarChart3, Trophy, Star, Bookmark, ChevronDown, ChevronUp, FileDown, PenLine } from "lucide-react"
 import { useStore } from "@/store/useStore"
 import RadarChart from "@/components/RadarChart"
 
@@ -22,7 +22,6 @@ export default function Profile() {
 
   const submissions = getSubmissionsByStudent(currentUser.id)
   const bookmarked = submissions.filter((s) => s.bookmarked)
-  const withNotes = submissions.filter((s) => s.notes.trim().length > 0)
 
   const totalPractices = submissions.length
   const avgScore = totalPractices > 0 ? Math.round(submissions.reduce((a, s) => a + (s.score?.total ?? 0), 0) / totalPractices) : 0
@@ -172,30 +171,59 @@ export default function Profile() {
             </div>
           )}
 
-          {withNotes.length > 0 && (
+          {submissions.length > 0 && (
             <div className="rounded-xl bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold text-[#1E293B]">复盘笔记</h2>
-              <div className="space-y-3">
-                {withNotes.map((sub) => {
-                  const caseData = getCaseById(sub.caseId)
-                  const isOpen = expandedNotes.has(sub.id)
-                  const draft = editingNotes[sub.id] ?? sub.notes
-                  return (
-                    <div key={sub.id} className="rounded-lg border border-gray-100">
-                      <button onClick={() => toggleNote(sub.id)} className="flex w-full items-center justify-between p-4 text-left">
-                        <span className="font-medium text-[#1E293B]">{caseData?.name ?? "未知病例"}</span>
-                        {isOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-                      </button>
-                      {isOpen && (
-                        <div className="border-t border-gray-100 px-4 pb-4 pt-3">
-                          <textarea value={draft} onChange={(e) => setEditingNotes((prev) => ({ ...prev, [sub.id]: e.target.value }))} className="w-full rounded-lg border border-gray-200 p-3 text-sm text-[#1E293B] focus:border-[#0F766E] focus:outline-none" rows={3} />
-                          <button onClick={() => { updateNotes(sub.id, draft); setEditingNotes((prev) => { const n = { ...prev }; delete n[sub.id]; return n }) }} className="mt-2 rounded-md bg-[#0F766E] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#0D6B63]">保存</button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+              {submissions.length === 0 ? (
+                <p className="text-sm text-gray-400">暂无练习记录</p>
+              ) : (
+                <div className="space-y-3">
+                  {sorted.map((sub) => {
+                    const caseData = getCaseById(sub.caseId)
+                    const hasNote = sub.notes.trim().length > 0
+                    const isOpen = expandedNotes.has(sub.id)
+                    const draft = editingNotes[sub.id] ?? sub.notes
+                    return (
+                      <div key={sub.id} className="rounded-lg border border-gray-100">
+                        <button onClick={() => toggleNote(sub.id)} className="flex w-full items-center justify-between p-4 text-left">
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium text-[#1E293B]">{caseData?.name ?? "未知病例"}</span>
+                            {hasNote && <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-700">有笔记</span>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {!hasNote && (
+                              <span className="flex items-center gap-1 text-xs text-[#0F766E] font-medium">
+                                <PenLine size={12} />写笔记
+                              </span>
+                            )}
+                            {isOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                          </div>
+                        </button>
+                        {isOpen && (
+                          <div className="border-t border-gray-100 px-4 pb-4 pt-3">
+                            <textarea
+                              value={draft}
+                              onChange={(e) => setEditingNotes((prev) => ({ ...prev, [sub.id]: e.target.value }))}
+                              className="w-full rounded-lg border border-gray-200 p-3 text-sm text-[#1E293B] focus:border-[#0F766E] focus:outline-none"
+                              rows={3}
+                              placeholder="写下你的复盘思考..."
+                            />
+                            <button
+                              onClick={() => {
+                                updateNotes(sub.id, draft)
+                                setEditingNotes((prev) => { const n = { ...prev }; delete n[sub.id]; return n })
+                              }}
+                              className="mt-2 rounded-md bg-[#0F766E] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#0D6B63]"
+                            >
+                              保存
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
