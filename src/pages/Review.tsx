@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { XCircle, Save, FileText, PenLine, CheckCircle } from "lucide-react"
 import FaceCanvas from "@/components/FaceCanvas"
@@ -36,6 +36,20 @@ export default function Review() {
   const [sTab, setStab] = useState<"point" | "dose" | "safety">("point")
   const [noteDraft, setNoteDraft] = useState(sub?.notes || "")
   const [noteSaved, setNoteSaved] = useState(false)
+
+  useEffect(() => {
+    if (!isTeacher || !sub?.review) return
+    setAnns(sub.review.annotations || [])
+    setSugs(sub.review.suggestions || [])
+    setFb({
+      point: sub.review.pointFeedback || "",
+      dose: sub.review.doseFeedback || "",
+      safety: sub.review.safetyFeedback || "",
+      general: sub.review.generalComment || "",
+    })
+  }, [sub?.review, isTeacher])
+
+  const hasExistingReview = isTeacher && !!sub?.review
 
   const diffStatuses = useMemo(() => {
     const m = new Map<string, "correct" | "offset" | "error">()
@@ -135,9 +149,14 @@ export default function Review() {
   return (
     <div className="min-h-screen bg-[#F0F4F8] flex flex-col">
       <header className="bg-[#0F766E] text-white px-4 py-3 shadow-md">
-        <h1 className="text-lg font-bold tracking-wide">{isTeacher ? "老师点评" : "查看点评"}</h1>
+        <h1 className="text-lg font-bold tracking-wide">{isTeacher ? (hasExistingReview ? "编辑点评" : "新建点评") : "查看点评"}</h1>
         <div className="text-teal-100 text-sm mt-1">
           {sub.studentName} · {caseData.name} · {new Date(sub.submittedAt).toLocaleDateString()}
+          {hasExistingReview && sub.review?.reviewedAt && (
+            <span className="ml-2 px-2 py-0.5 bg-teal-700 rounded text-xs">
+              已有点评 · {new Date(sub.review.reviewedAt).toLocaleDateString()}
+            </span>
+          )}
         </div>
       </header>
 

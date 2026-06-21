@@ -6,6 +6,7 @@ import { MOCK_USERS, MOCK_CASES } from "../data/mockData"
 interface AppState {
   currentUser: User | null
   submissions: Submission[]
+  reviewListFilter: { search: string; caseId: string; status: 'all' | 'pending' | 'reviewed'; hasSafetyIssue: boolean }
   login: (userId: string, password?: string) => boolean
   logout: () => void
   addSubmission: (submission: Submission) => void
@@ -14,6 +15,7 @@ interface AppState {
   toggleBookmark: (submissionId: string) => void
   updateNotes: (submissionId: string, notes: string) => void
   updateAdjustedReasons: (submissionId: string, reasons: AdjustedReason[]) => void
+  setReviewListFilter: (filter: Partial<{ search: string; caseId: string; status: 'all' | 'pending' | 'reviewed'; hasSafetyIssue: boolean }>) => void
   getUsers: () => User[]
   getCases: () => typeof MOCK_CASES
   getCaseById: (id: string) => typeof MOCK_CASES[0] | undefined
@@ -44,6 +46,7 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       currentUser: null,
       submissions: [],
+      reviewListFilter: { search: '', caseId: 'all', status: 'all', hasSafetyIssue: false },
 
       login: (userId: string, password?: string) => {
         const user = MOCK_USERS.find(u => u.id === userId)
@@ -97,6 +100,12 @@ export const useStore = create<AppState>()(
           submissions: state.submissions.map(s =>
             s.id === submissionId ? { ...s, adjustedReasons: reasons, status: "adjusted" as const } : s
           ),
+        }))
+      },
+
+      setReviewListFilter: (filter) => {
+        set(state => ({
+          reviewListFilter: { ...state.reviewListFilter, ...filter },
         }))
       },
 
@@ -191,6 +200,7 @@ export const useStore = create<AppState>()(
       partialize: (state) => ({
         currentUser: state.currentUser,
         submissions: state.submissions,
+        reviewListFilter: state.reviewListFilter,
       }),
     }
   )
