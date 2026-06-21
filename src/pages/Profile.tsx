@@ -1,6 +1,6 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
-import { BarChart3, Trophy, Star, Bookmark, ChevronDown, ChevronUp, FileDown, PenLine } from "lucide-react"
+import { BarChart3, Trophy, Star, Bookmark, ChevronDown, ChevronUp, FileDown, PenLine, Eye, MessageSquare } from "lucide-react"
 import { useStore } from "@/store/useStore"
 import RadarChart from "@/components/RadarChart"
 
@@ -14,6 +14,7 @@ export default function Profile() {
 
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set())
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
+  const [filter, setFilter] = useState<"all" | "bookmarked" | "hasNotes" | "pending" | "reviewed">("all")
   const reportRef = useRef<HTMLDivElement>(null)
 
   if (!currentUser) {
@@ -41,6 +42,31 @@ export default function Profile() {
   ]
 
   const sorted = [...submissions].sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+
+  const filteredList = useMemo(() => {
+    return sorted.filter((sub) => {
+      switch (filter) {
+        case "bookmarked":
+          return sub.bookmarked
+        case "hasNotes":
+          return sub.notes.trim().length > 0
+        case "pending":
+          return (sub.status === "submitted" || sub.status === "adjusted") && !sub.review
+        case "reviewed":
+          return !!sub.review
+        default:
+          return true
+      }
+    })
+  }, [sorted, filter])
+
+  const filterTabs: { key: typeof filter; label: string }[] = [
+    { key: "all", label: "全部" },
+    { key: "bookmarked", label: "已收藏" },
+    { key: "hasNotes", label: "有笔记" },
+    { key: "pending", label: "待点评" },
+    { key: "reviewed", label: "已点评" },
+  ]
 
   const statusConfig: Record<string, { label: string; cls: string }> = {
     reviewed: { label: "已点评", cls: "bg-teal-100 text-teal-700" },
@@ -118,15 +144,30 @@ export default function Profile() {
 
           <div className="rounded-xl bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold text-[#1E293B]">练习历史</h2>
-            {sorted.length === 0 ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {filterTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setFilter(tab.key)}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                    filter === tab.key
+                      ? "bg-[#0F766E] text-white"
+                      : "bg-white text-gray-500 hover:bg-gray-50"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {filteredList.length === 0 ? (
               <p className="text-sm text-gray-400">暂无练习记录</p>
             ) : (
               <div className="space-y-3">
-                {sorted.map((sub) => {
+                {filteredList.map((sub) => {
                   const caseData = getCaseById(sub.caseId)
                   const st = statusConfig[sub.status] ?? statusConfig.submitted
                   return (
-                    <div key={sub.id} onClick={() => navigate(`/compare/${sub.id}`)} className="flex cursor-pointer items-center justify-between rounded-lg border border-gray-100 p-4 transition-colors hover:border-[#0F766E] hover:bg-gray-50">
+                    <div key={sub.id} className="flex items-center justify-between rounded-lg border border-gray-100 p-4 transition-colors hover:border-[#0F766E] hover:bg-gray-50">
                       <div className="flex items-center gap-4">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#F0F4F8]">
                           <BarChart3 size={18} className="text-[#0F766E]" />
@@ -139,6 +180,22 @@ export default function Profile() {
                       <div className="flex items-center gap-3">
                         <span className="text-lg font-bold text-[#0F766E]">{sub.score?.total ?? 0}</span>
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigate(`/compare/${sub.id}`) }}
+                            className="flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-[#0F766E] hover:text-[#0F766E]"
+                          >
+                            <Eye size={12} /> 查看对比
+                          </button>
+                          {sub.review && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); navigate(`/review/${sub.id}`) }}
+                              className="flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-[#0F766E] hover:text-[#0F766E]"
+                            >
+                              <MessageSquare size={12} /> 查看点评
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )

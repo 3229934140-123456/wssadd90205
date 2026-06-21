@@ -77,6 +77,7 @@ export interface Annotation {
 export interface Suggestion {
   annotationId: string
   text: string
+  category: "point" | "dose" | "safety"
 }
 
 export interface TeacherReview {
@@ -84,6 +85,10 @@ export interface TeacherReview {
   teacherName: string
   annotations: Annotation[]
   suggestions: Suggestion[]
+  pointFeedback?: string
+  doseFeedback?: string
+  safetyFeedback?: string
+  generalComment?: string
   reviewedAt: string
 }
 
